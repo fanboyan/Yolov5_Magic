@@ -53,16 +53,18 @@ class FocalLoss(nn.Module):
         alpha_factor = true * self.alpha + (1 - true) * (1 - self.alpha)
         modulating_factor = (1.0 - p_t) ** self.gamma
         loss *= alpha_factor * modulating_factor
-
+        print(loss.shape)
+        print(self.reduction)
         if self.reduction == 'mean':
             return loss.mean()
         elif self.reduction == 'sum':
             return loss.sum()
         else:  # 'none'
+
             return loss
 class Poly1FocalLoss(nn.Module):
     # Wraps focal loss around existing loss_fcn(), i.e. criteria = FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5)
-    def __init__(self, loss_fcn, gamma=1.5, alpha=0.25):
+    def __init__(self, loss_fcn, gamma=2.0, alpha=0.25):
         super().__init__()
         self.loss_fcn = loss_fcn  # must be nn.BCEWithLogitsLoss()
         self.gamma = gamma
@@ -74,7 +76,7 @@ class Poly1FocalLoss(nn.Module):
         loss = self.loss_fcn(pred, true)
         # p_t = torch.exp(-loss)
         # loss *= self.alpha * (1.000001 - p_t) ** self.gamma  # non-zero power for gradient stability
-
+        print(true.shape)
         # TF implementation https://github.com/tensorflow/addons/blob/v0.7.1/tensorflow_addons/losses/focal_loss.py
         pred_prob = torch.sigmoid(pred)  # prob from logits
         p_t = true * pred_prob + (1 - true) * (1 - pred_prob)
@@ -89,97 +91,59 @@ class Poly1FocalLoss(nn.Module):
             return loss.sum()
         else:  # 'none'
             return loss
-#
-# class Poly1FocalLoss(nn.Module):
-#     def __init__(self,
-#                  num_classes: int,
-#                  epsilon: float = 1.0,
-#                  alpha: float = 0.25,
-#                  gamma: float = 2.0,
-#                  reduction: str = "none"):
-#         """
-#         Create instance of Poly1FocalLoss
-#         :param num_classes: number of classes
-#         :param epsilon: poly loss epsilon
-#         :param alpha: focal loss alpha
-#         :param gamma: focal loss gamma
-#         :param reduction: one of none|sum|mean, apply reduction to final loss tensor
-#         """
-#         super(Poly1FocalLoss, self).__init__()
-#         self.num_classes = 5
-#         self.epsilon = epsilon
-#         self.alpha = alpha
-#         self.gamma = gamma
-#         self.reduction = reduction
-#         return
-#
-#     def forward(self, logits, labels):
-#         """
-#         Forward pass
-#         :param logits: output of neural netwrok of shape [N, num_classes] or [N, num_classes, ...]
-#         :param labels: ground truth of shape [N] or [N, ...], NOT one-hot encoded
-#         :return: poly focal loss
-#         """
-#         # focal loss implementation taken from
-#         # https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/focal_loss.py
-#
-#         p = torch.sigmoid(logits)
-#
-#         # if labels are of shape [N]
-#         # convert to one-hot tensor of shape [N, num_classes]
-#         if labels.ndim == 1:
-#             labels = F.one_hot(labels, num_classes=self.num_classes)
-#
-#         # if labels are of shape [N, ...] e.g. segmentation task
-#         # convert to one-hot tensor of shape [N, num_classes, ...]
-#         else:
-#             labels = F.one_hot(labels.unsqueeze(1), self.num_classes).transpose(1, -1).squeeze_(-1)
-#
-#         labels = labels.to(device=logits.device,
-#                            dtype=logits.dtype)
-#
-#         ce_loss = F.binary_cross_entropy_with_logits(logits, labels, reduction="none")
-#         pt = labels * p + (1 - labels) * (1 - p)
-#         FL = ce_loss * ((1 - pt) ** self.gamma)
-#
-#         if self.alpha >= 0:
-#             alpha_t = self.alpha * labels + (1 - self.alpha) * (1 - labels)
-#             FL = alpha_t * FL
-#
-#         poly1 = FL + self.epsilon * torch.pow(1 - pt, self.gamma + 1)
-#
-#         if self.reduction == "mean":
-#             poly1 = poly1.mean()
-#         elif self.reduction == "sum":
-#             poly1 = poly1.sum()
-#
-#         return poly1
 
-class QFocalLoss(nn.Module):
-    # Wraps Quality focal loss around existing loss_fcn(), i.e. criteria = FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5)
-    def __init__(self, loss_fcn, gamma=1.5, alpha=0.25):
+
+# class QFocalLoss(nn.Module):
+#     # Wraps Quality focal loss around existing loss_fcn(), i.e. criteria = FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5)
+#     def __init__(self, loss_fcn, gamma=1.5, alpha=0.25):
+#         super().__init__()
+#         self.loss_fcn = loss_fcn  # must be nn.BCEWithLogitsLoss()
+#         self.gamma = gamma
+#         self.alpha = alpha
+#         self.reduction = loss_fcn.reduction
+#         self.loss_fcn.reduction = 'none'  # required to apply FL to each element
+#
+#     def forward(self, pred, true):
+#         loss = self.loss_fcn(pred, true)
+#
+#         pred_prob = torch.sigmoid(pred)  # prob from logits
+#         alpha_factor = true * self.alpha + (1 - true) * (1 - self.alpha)
+#         modulating_factor = torch.abs(true - pred_prob) ** self.gamma
+#         loss *= alpha_factor * modulating_factor
+#
+#         if self.reduction == 'mean':
+#             return loss.mean()
+#         elif self.reduction == 'sum':
+#             return loss.sum()
+#         else:  # 'none'
+#             return loss
+class poly1_cross_entropy_torch(nn.Module):
+    # BCEwithLogitLoss() with reduced missing label effects.
+    def __init__(self, loss_fcn,epsilon=1.0):
         super().__init__()
-        self.loss_fcn = loss_fcn  # must be nn.BCEWithLogitsLoss()
-        self.gamma = gamma
-        self.alpha = alpha
+        self.loss_fcn = loss_fcn # must be nn.BCEWithLogitsLoss()
+        self.epsilon = epsilon
         self.reduction = loss_fcn.reduction
         self.loss_fcn.reduction = 'none'  # required to apply FL to each element
+    def forward(self, logits, labels):
+        pred_prob = torch.sigmoid(logits)  # prob from logits
+        # p_t = labels * pred_prob + (1 - labels) * (1 - pred_prob)
+        # labels_onehot=labels.to(device=logits.device,
+        #    dtype=logits.dtype)
+        # labels_onehot = F.one_hot(labels, num_classes=5).float()
+        # pt = torch.sum(labels_onehot * F.softmax(logits, dim=-1), dim=-1)
+        pt = labels *(torch.sigmoid(logits))
+        # print(labels.shape)
+        # print(labels)
+        # # print(F.softmax(logits, dim=-1))
+        # print(F.softmax(logits, dim=-1).shape)
 
-    def forward(self, pred, true):
-        loss = self.loss_fcn(pred, true)
+        ce_loss = self.loss_fcn(logits, labels)
 
-        pred_prob = torch.sigmoid(pred)  # prob from logits
-        alpha_factor = true * self.alpha + (1 - true) * (1 - self.alpha)
-        modulating_factor = torch.abs(true - pred_prob) ** self.gamma
-        loss *= alpha_factor * modulating_factor
-
-        if self.reduction == 'mean':
-            return loss.mean()
-        elif self.reduction == 'sum':
-            return loss.sum()
-        else:  # 'none'
-            return loss
-
+        poly1_ce_loss = ce_loss + self.epsilon * (1 - pt)
+        # print(poly1_ce_loss)
+        # print(poly1_ce_loss.shape)
+        return poly1_ce_loss.mean()
 
 class ComputeLoss:
     sort_obj_iou = False
@@ -190,12 +154,14 @@ class ComputeLoss:
         h = model.hyp  # hyperparameters
 
         # Define criteria
+
         BCEcls = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['cls_pw']], device=device))
         BCEobj = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([h['obj_pw']], device=device))
 
+
         # Class label smoothing https://arxiv.org/pdf/1902.04103.pdf eqn 3
         self.cp, self.cn = smooth_BCE(eps=h.get('label_smoothing', 0.0))  # positive, negative BCE targets
-
+        BCEcls, BCEobj = poly1_cross_entropy_torch(BCEcls), poly1_cross_entropy_torch(BCEobj)
         # Focal loss
         g = h['fl_gamma']  # focal loss gamma
         if g > 0:
