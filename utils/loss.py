@@ -2,7 +2,7 @@
 """
 Loss functions
 """
-
+import numpy
 import torch
 import torch.nn as nn
 
@@ -60,7 +60,7 @@ class FocalLoss(nn.Module):
             return loss.sum()
         else:  # 'none'
             return loss
-class Poly_FocalLoss(nn.Module):
+class Poly1FocalLoss(nn.Module):
     # Wraps focal loss around existing loss_fcn(), i.e. criteria = FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5)
     def __init__(self, loss_fcn, gamma=1.5, alpha=0.25):
         super().__init__()
@@ -81,24 +81,79 @@ class Poly_FocalLoss(nn.Module):
         alpha_factor = true * self.alpha + (1 - true) * (1 - self.alpha)
         modulating_factor = (1.0 - p_t) ** self.gamma
         loss *= alpha_factor * modulating_factor
-
-        if self.reduction == 'mean':
-            loss.mean()
-        elif self.reduction == 'sum':
-            loss.sum()
-        else:  # 'none'
-            loss
-
-        focal_loss = loss
-        class_number=8
         epsilon=1.0
-        p = torch.nn.functional.sigmoid(pred)
-        labels = torch.nn.functional.one_hot(true, class_number)
-        labels = torch.tensor(labels, dtype=torch.float32)
-        poly1 = labels * p + (1 - labels) * (1 - p)
-        poly1_focal_loss = focal_loss + torch.mean(epsilon * torch.pow(1 - poly1, 2 + 1), dim=-1)
-        return poly1_focal_loss
-
+        loss = loss + epsilon * torch.pow(1 - p_t, self.gamma + 1)
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        else:  # 'none'
+            return loss
+#
+# class Poly1FocalLoss(nn.Module):
+#     def __init__(self,
+#                  num_classes: int,
+#                  epsilon: float = 1.0,
+#                  alpha: float = 0.25,
+#                  gamma: float = 2.0,
+#                  reduction: str = "none"):
+#         """
+#         Create instance of Poly1FocalLoss
+#         :param num_classes: number of classes
+#         :param epsilon: poly loss epsilon
+#         :param alpha: focal loss alpha
+#         :param gamma: focal loss gamma
+#         :param reduction: one of none|sum|mean, apply reduction to final loss tensor
+#         """
+#         super(Poly1FocalLoss, self).__init__()
+#         self.num_classes = 5
+#         self.epsilon = epsilon
+#         self.alpha = alpha
+#         self.gamma = gamma
+#         self.reduction = reduction
+#         return
+#
+#     def forward(self, logits, labels):
+#         """
+#         Forward pass
+#         :param logits: output of neural netwrok of shape [N, num_classes] or [N, num_classes, ...]
+#         :param labels: ground truth of shape [N] or [N, ...], NOT one-hot encoded
+#         :return: poly focal loss
+#         """
+#         # focal loss implementation taken from
+#         # https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/focal_loss.py
+#
+#         p = torch.sigmoid(logits)
+#
+#         # if labels are of shape [N]
+#         # convert to one-hot tensor of shape [N, num_classes]
+#         if labels.ndim == 1:
+#             labels = F.one_hot(labels, num_classes=self.num_classes)
+#
+#         # if labels are of shape [N, ...] e.g. segmentation task
+#         # convert to one-hot tensor of shape [N, num_classes, ...]
+#         else:
+#             labels = F.one_hot(labels.unsqueeze(1), self.num_classes).transpose(1, -1).squeeze_(-1)
+#
+#         labels = labels.to(device=logits.device,
+#                            dtype=logits.dtype)
+#
+#         ce_loss = F.binary_cross_entropy_with_logits(logits, labels, reduction="none")
+#         pt = labels * p + (1 - labels) * (1 - p)
+#         FL = ce_loss * ((1 - pt) ** self.gamma)
+#
+#         if self.alpha >= 0:
+#             alpha_t = self.alpha * labels + (1 - self.alpha) * (1 - labels)
+#             FL = alpha_t * FL
+#
+#         poly1 = FL + self.epsilon * torch.pow(1 - pt, self.gamma + 1)
+#
+#         if self.reduction == "mean":
+#             poly1 = poly1.mean()
+#         elif self.reduction == "sum":
+#             poly1 = poly1.sum()
+#
+#         return poly1
 
 class QFocalLoss(nn.Module):
     # Wraps Quality focal loss around existing loss_fcn(), i.e. criteria = FocalLoss(nn.BCEWithLogitsLoss(), gamma=1.5)
@@ -144,8 +199,8 @@ class ComputeLoss:
         # Focal loss
         g = h['fl_gamma']  # focal loss gamma
         if g > 0:
-            BCEcls, BCEobj = FocalLoss(BCEcls, g), FocalLoss(BCEobj, g)
-            # BCEcls, BCEobj = Poly_FocalLoss(BCEcls, g), FocalLoss(BCEobj, g)
+            # BCEcls, BCEobj = FocalLoss(BCEcls, g), FocalLoss(BCEobj, g)
+            BCEcls, BCEobj = Poly1FocalLoss(BCEcls, g), Poly1FocalLoss(BCEobj, g)
 
         m = de_parallel(model).model[-1]  # Detect() module
         self.balance = {3: [4.0, 1.0, 0.4]}.get(m.nl, [4.0, 1.0, 0.25, 0.06, 0.02])  # P3-P7
