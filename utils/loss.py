@@ -6,7 +6,7 @@ import numpy
 import torch
 import torch.nn as nn
 
-from utils.metrics import bbox_iou
+from utils.metrics import bbox_iou,E_iou,a_iou,S_iou
 from utils.torch_utils import de_parallel
 import torch.nn.functional as F
 
@@ -161,7 +161,7 @@ class ComputeLoss:
 
         # Class label smoothing https://arxiv.org/pdf/1902.04103.pdf eqn 3
         self.cp, self.cn = smooth_BCE(eps=h.get('label_smoothing', 0.0))  # positive, negative BCE targets
-        BCEcls, BCEobj = poly1_cross_entropy_torch(BCEcls), poly1_cross_entropy_torch(BCEobj)
+        # BCEcls, BCEobj = poly1_cross_entropy_torch(BCEcls), poly1_cross_entropy_torch(BCEobj)
         # Focal loss
         g = h['fl_gamma']  # focal loss gamma
         if g > 0:
@@ -198,7 +198,12 @@ class ComputeLoss:
                 pxy = pxy.sigmoid() * 2 - 0.5
                 pwh = (pwh.sigmoid() * 2) ** 2 * anchors[i]
                 pbox = torch.cat((pxy, pwh), 1)  # predicted box
-                iou = bbox_iou(pbox, tbox[i], CIoU=True).squeeze()  # iou(prediction, target)
+                #原始
+                # iou = bbox_iou(pbox, tbox[i], CIoU=True).squeeze()  # iou(prediction, target)
+                # iou = E_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=False, EIoU=True)
+                # iou = a_iou(pbox.T, tbox[i], x1y1x2y2=False, CIoU=True, alpha=3)
+                iou = S_iou(pbox.T, tbox[i], x1y1x2y2=False, SIoU=True)
+
                 lbox += (1.0 - iou).mean()  # iou loss
 
                 # Objectness
