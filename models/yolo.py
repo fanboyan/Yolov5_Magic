@@ -375,7 +375,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
                  C3CA, C3ECA, C3CBAM, C3SE,
                  Inception_Conv, nn.ConvTranspose2d, CARAFE, CBRM, Shuffle_Block,
                  ASPP, BasicRFB, SPPCSPC, SPPCSPC_group,
-                 C3_CoordAtt_Attention, C3_SE_Attention, C3_ECA_Attention, C3_CBAM_Attention,
+                 C3_CoordAtt_Attention, C3_SE_Attention, C3_ECA_Attention, C3_CBAM_Attention, GSConv, VoVGSCSP, VoVGSCSPC
                  ):
             # c1: 当前层的输入的channel数  c2: 当前层的输出的channel数(初定)  ch: 记录着所有层的输出channel
             c1, c2 = ch[f], args[0]
@@ -390,7 +390,7 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
             # [in_channel, out_channel, Bottleneck的个数n, bool(True表示有shortcut 默认，反之无)]
             if m in [BottleneckCSP, C3, C3TR, C3Ghost, C3x,
                      C3CA, C3ECA, C3CBAM, C3SE,
-                     C3_CoordAtt_Attention, C3_SE_Attention, C3_ECA_Attention, C3_CBAM_Attention]:
+                     C3_CoordAtt_Attention, C3_SE_Attention, C3_ECA_Attention, C3_CBAM_Attention,VoVGSCSP, VoVGSCSPC]:
                 args.insert(2, n)  # number of repeats  在第二个位置插入bottleneck个数n
                 n = 1  # 恢复默认值1
             elif m is nn.ConvTranspose2d:  # 转置卷积
